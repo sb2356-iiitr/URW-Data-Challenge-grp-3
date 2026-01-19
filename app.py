@@ -27,11 +27,38 @@ import os
 @st.cache_data
 def load_data():
     file_path = 'urw_dashboard_data.csv'
+    malls_path = 'dim_malls_v1.csv'
+
+    # Safe path resolution
     if not os.path.exists(file_path):
-        # Try relative to this script
         script_dir = os.path.dirname(os.path.abspath(__file__))
         file_path = os.path.join(script_dir, 'urw_dashboard_data.csv')
-    return pd.read_csv(file_path)
+        malls_path = os.path.join(script_dir, 'dim_malls_v1.csv')
+    
+    df = pd.read_csv(file_path)
+    
+    # Merge Mall Names
+    if os.path.exists(malls_path):
+        try:
+             # Try reading with fallback encoding for special chars
+             try:
+                 malls = pd.read_csv(malls_path, encoding='utf-8')
+             except:
+                 malls = pd.read_csv(malls_path, encoding='latin1')
+             
+             malls['id'] = pd.to_numeric(malls['id'], errors='coerce')
+             df = df.merge(malls[['id', 'mall_name']], left_on='Mall_ID', right_on='id', how='left')
+             
+             df['Mall_Display'] = df.apply(
+                 lambda x: x['mall_name'] if pd.notna(x['mall_name']) else f"Mall {int(x['Mall_ID'])}",
+                 axis=1
+             )
+        except:
+             df['Mall_Display'] = "Mall " + df['Mall_ID'].astype(str)
+    else:
+        df['Mall_Display'] = "Mall " + df['Mall_ID'].astype(str)
+        
+    return df
 
 try:
     df = load_data()
@@ -41,12 +68,18 @@ except FileNotFoundError:
 
 # --- Sidebar Filters ---
 st.sidebar.header("📍 Location Filter")
-all_malls = sorted(df['Mall_ID'].unique().tolist())
-selected_mall = st.sidebar.selectbox("Select Shopping Centre", all_malls)
+
+# Create Mapping
+mall_options = df[['Mall_ID', 'Mall_Display']].drop_duplicates().sort_values('Mall_Display')
+mall_map = dict(zip(mall_options['Mall_Display'], mall_options['Mall_ID']))
+
+selected_mall_name = st.sidebar.selectbox("Select Shopping Centre", mall_options['Mall_Display'])
+selected_mall_id = mall_map[selected_mall_name]
 
 # Filter Data
-mall_data = df[df['Mall_ID'] == selected_mall].copy()
-mall_data = mall_data.sort_values('Revenue_Uplift', ascending=False)
+top_n = st.sidebar.slider("Show Top Opportunities", 5, 200, 50)
+mall_data = df[df['Mall_ID'] == selected_mall_id].copy()
+mall_data = mall_data.sort_values('Revenue_Uplift', ascending=False).head(top_n)
 
 # --- Top Level KPIs ---
 # Assuming 150 m2 avg store size for impact calc if not in data. 
@@ -61,7 +94,7 @@ kpi2.metric("Avg. Density Uplift", f"+€{avg_uplift:,.0f} /m²", "Per Optimized
 kpi3.metric("Total Est. Revenue Unlock", f"€{total_opportunity/1000000:.1f}M", "Annual Potential (est. @ 200m² avg)")
 
 # --- Main Interface ---
-st.subheader(f"Optimization Targets: Mall {selected_mall}")
+st.subheader(f"Optimization Targets: {selected_mall_name}")
 
 # Display Table
 st.dataframe(
@@ -90,6 +123,15 @@ if not mall_data.empty:
         st.success(f"**AI Recommendation:** {store_row['Rec_SubCat']}")
         st.write(f"The model detects this location has structural/network characteristics usage suitable for **{store_row['Rec_Category']}** (specifically **{store_row['Rec_SubCat']}**).")
         st.metric("Projected Density Increase", f"+€{store_row['Revenue_Uplift']:,.0f}")
+        
+        with st.expander("🔄 See Alternative Strategies"):
+             if 'Rec_2_SubCat' in store_row and pd.notna(store_row['Rec_2_SubCat']):
+                 st.write("**Top 3 AI Recommendations:**")
+                 st.markdown(f"1. 🥇 **{store_row['Rec_SubCat']}** (+€{store_row['Revenue_Uplift']:,.0f})")
+                 st.markdown(f"2. 🥈 **{store_row.get('Rec_2_SubCat')}** (+€{store_row.get('Rec_2_Uplift', 0):,.0f})")
+                 st.markdown(f"3. 🥉 **{store_row.get('Rec_3_SubCat')}** (+€{store_row.get('Rec_3_Uplift', 0):,.0f})")
+             else:
+                 st.write("No alternative strategies available.")
 
     with col_right:
         # Bar Chart
