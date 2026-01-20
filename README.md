@@ -1,6 +1,6 @@
 # URW Data Challenge - Group 3: AI-Driven Tenant Mix Optimizer
 
-**Group 3:** A. Arya, S. Bairagi, L. Chen, I. El Ouafiq, A. Gupta
+**Group 3:** A. Arya, S. Bairagi, S. Capizzi, L. Passet, I. Sijelmassi, J. Xu
 
 ## Executive Summary
 This project aims to optimize the tenant mix for Unibail-Rodamco-Westfield (URW) shopping centers. By leveraging AI and data analytics, we identify underperforming assets and recommend optimal tenant sub-categories to maximize revenue uplift and sales density.
